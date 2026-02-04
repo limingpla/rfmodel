@@ -10,12 +10,12 @@ model = joblib.load('RF.pkl')
 
 # 特征范围定义（根据提供的特征范围和数据类型）
 feature_ranges = {
-    "Age": {"type": "numerical", "min": 18, "max": 89, "default": 45},
+    "Age": {"type": "numerical", "min": 24, "max": 89, "default": 45},
     "AAPR": {"type": "numerical", "min": 0.0341, "max": 1.2875, "default": 0.5000},
     "LAR": {"type": "numerical", "min": 0.0132, "max": 0.6726, "default": 0.3000},
     "Hemoglobin": {"type": "numerical", "min": 28.5, "max": 195, "default": 100},
     "GCS": {"type": "numerical", "min": 1, "max": 15, "default": 12},
-    "SOFA": {"type": "numerical", "min": 2, "max": 24, "default": 5},
+    "SOFA": {"type": "numerical", "min": 3, "max": 13, "default": 5},
     "PLR": {"type": "numerical", "min": 10.674, "max": 950.000, "default": 400.00},
     "PNI": {"type": "numerical", "min": 16.55, "max": 442.45, "default": 200.00},
 }
@@ -48,19 +48,8 @@ feature_df = pd.DataFrame([feature_values], columns=feature_ranges.keys())
 # 预测与 SHAP 可视化
 if st.button("Predict"):
     # 模型预测
-    # 修改原始代码的第51行附近
-if st.button("Predict"):
-    try:
-        # 将DataFrame转换为numpy数组
-        feature_array = feature_df.values.astype(float)
-        
-        # 使用numpy数组进行预测（跳过特征名称检查）
-        predicted_class = model.predict(feature_array)[0]
-        predicted_proba = model.predict_proba(feature_array)[0]
-        
-        # ... 其余代码保持不变 ...
-    except Exception as e:
-        st.error(f"错误：{e}")
+    predicted_class = model.predict(feature_df)[0]
+    predicted_proba = model.predict_proba(feature_df)[0]
 
     # 提取预测的类别概率
     probability = predicted_proba[predicted_class] * 100
