@@ -4,25 +4,11 @@ import numpy as np
 import pandas as pd
 import shap
 import matplotlib.pyplot as plt
-import traceback
 
-# 加载模型
-@st.cache_resource
-def load_model():
-    return joblib.load('RF.pkl')
+# 加载保存的随机森林模型
+model = joblib.load('RF.pkl')
 
-model = load_model()
-
-# 获取模型特征名称
-if hasattr(model, 'feature_names_in_'):
-    MODEL_FEATURES = list(model.feature_names_in_)
-    st.sidebar.write(f"模型期望 {len(MODEL_FEATURES)} 个特征")
-    st.sidebar.write(MODEL_FEATURES)
-else:
-    # 如果没有特征名称，使用原始定义
-    MODEL_FEATURES = ["Age", "AAPR", "LAR", "Hemoglobin", "GCS", "SOFA", "PLR", "PNI"]
-
-# 特征范围定义 - 根据模型特征重新组织
+# 特征范围定义（根据提供的特征范围和数据类型）
 feature_ranges = {
     "Age": {"type": "numerical", "min": 18, "max": 89, "default": 45},
     "AAPR": {"type": "numerical", "min": 0.0341, "max": 1.2875, "default": 0.5000},
@@ -37,115 +23,119 @@ feature_ranges = {
 # Streamlit 界面
 st.title("Cognitive Impairment Prediction Model with SHAP Visualization")
 
-# 动态生成输入项 - 按照模型特征顺序
+# 动态生成输入项
 st.header("Enter the following feature values:")
-user_inputs = {}
-
-for feature in MODEL_FEATURES:
-    if feature in feature_ranges:
-        props = feature_ranges[feature]
-        if props["type"] == "numerical":
-            value = st.number_input(
-                label=f"{feature} ({props['min']} - {props['max']})",
-                min_value=float(props["min"]),
-                max_value=float(props["max"]),
-                value=float(props["default"]),
-                key=f"input_{feature}"  # 添加唯一的key
-            )
-        user_inputs[feature] = value
-    else:
-        st.warning(f"特征 '{feature}' 没有定义范围，请输入值：")
+feature_values = []
+for feature, properties in feature_ranges.items():
+    if properties["type"] == "numerical":
         value = st.number_input(
-            label=f"{feature}",
-            value=0.0,
-            key=f"input_{feature}"
+            label=f"{feature} ({properties['min']} - {properties['max']})",
+            min_value=float(properties["min"]),
+            max_value=float(properties["max"]),
+            value=float(properties["default"]),
         )
-        user_inputs[feature] = value
+    elif properties["type"] == "categorical":
+        value = st.selectbox(
+            label=f"{feature} (Select a value)",
+            options=properties["options"],
+        )
+    feature_values.append(value)
 
-# 转换为模型输入格式 - 确保正确顺序
-feature_values = [user_inputs[feat] for feat in MODEL_FEATURES]
-feature_df = pd.DataFrame([feature_values], columns=MODEL_FEATURES)
-
-st.write("### 输入的特征数据预览：")
-st.dataframe(feature_df)
+# 转换为模型输入格式
+features = np.array([feature_values])
+feature_df = pd.DataFrame([feature_values], columns=feature_ranges.keys())
 
 # 预测与 SHAP 可视化
 if st.button("Predict"):
+    # 模型预测
+    # 修改原始代码的第51行附近
+if st.button("Predict"):
     try:
-        # 模型预测
-        predicted_class = model.predict(feature_df)[0]
-        predicted_proba = model.predict_proba(feature_df)[0]
-
-        # 提取预测的类别概率
-        probability = predicted_proba[predicted_class] * 100
-
-        # 显示预测结果
-        st.success(f"### 预测结果")
-        st.write(f"**认知障碍预测概率：{probability:.2f}%**")
-        st.write(f"预测类别：{predicted_class}")
-
-        # 计算 SHAP 值
-        explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(feature_df)
+        # 将DataFrame转换为numpy数组
+        feature_array = feature_df.values.astype(float)
         
-        # 处理 SHAP 可视化
-        st.write("### SHAP 解释")
+        # 使用numpy数组进行预测（跳过特征名称检查）
+        predicted_class = model.predict(feature_array)[0]
+        predicted_proba = model.predict_proba(feature_array)[0]
         
-        try:
-            if isinstance(shap_values, list):
-                # 多分类情况
-                shap_array = shap_values[predicted_class]
-                expected_value = explainer.expected_value[predicted_class] if isinstance(explainer.expected_value, (list, np.ndarray)) else explainer.expected_value
-            else:
-                # 二分类或回归情况
-                shap_array = shap_values
-                expected_value = explainer.expected_value
-            
-            # 生成 SHAP 力图
-            fig, ax = plt.subplots(figsize=(10, 4))
-            shap.force_plot(
-                expected_value,
-                shap_array[0],
-                feature_df.iloc[0],
-                matplotlib=True,
-                show=False,
-                ax=ax
-            )
-            st.pyplot(fig)
-            plt.close()
-            
-        except Exception as shap_error:
-            st.warning(f"SHAP 图生成失败：{str(shap_error)}")
-            # 显示特征重要性作为备选
-            if hasattr(model, 'feature_importances_'):
-                st.write("### 特征重要性")
-                importance_df = pd.DataFrame({
-                    'Feature': MODEL_FEATURES,
-                    'Importance': model.feature_importances_
-                }).sort_values('Importance', ascending=False)
-                
-                fig, ax = plt.subplots(figsize=(10, 6))
-                bars = ax.barh(importance_df['Feature'], importance_df['Importance'])
-                ax.set_xlabel('Importance')
-                ax.set_title('Feature Importance')
-                # 添加数值标签
-                for bar in bars:
-                    width = bar.get_width()
-                    ax.text(width, bar.get_y() + bar.get_height()/2, 
-                           f'{width:.4f}', ha='left', va='center')
-                st.pyplot(fig)
-                
+        # ... 其余代码保持不变 ...
     except Exception as e:
-        st.error(f"❌ 预测过程中发生错误：")
-        st.code(traceback.format_exc())
+        st.error(f"错误：{e}")
+
+    # 提取预测的类别概率
+    probability = predicted_proba[predicted_class] * 100
+
+    # 显示预测结果，使用 Matplotlib 渲染指定字体
+    text = f"Based on feature values, predicted possibility of Cognitive impairment is {probability:.2f}%"
+    fig, ax = plt.subplots(figsize=(8, 1))
+    ax.text(
+        0.5, 0.5, text,
+        fontsize=16,
+        ha='center', va='center',
+        fontname='Times New Roman',
+        transform=ax.transAxes
+    )
+    ax.axis('off')
+    st.pyplot(fig)
+
+    # 计算 SHAP 值
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(feature_df)
+    
+    # 调试信息（可选）
+    st.write("Debug Info:")
+    st.write(f"Predicted class: {predicted_class}")
+    st.write(f"SHAP values type: {type(shap_values)}")
+    if isinstance(shap_values, list):
+        st.write(f"Number of SHAP arrays: {len(shap_values)}")
+        for i, arr in enumerate(shap_values):
+            st.write(f"Array {i} shape: {arr.shape}")
+    else:
+        st.write(f"SHAP values shape: {shap_values.shape}")
+
+    try:
+        # 处理不同的 SHAP 输出格式
+        if isinstance(shap_values, list):
+            # 多分类情况
+            if predicted_class < len(shap_values):
+                shap_array = shap_values[predicted_class]
+                expected_value = explainer.expected_value[predicted_class]
+            else:
+                shap_array = shap_values[0]
+                expected_value = explainer.expected_value[0]
+        else:
+            # 二分类或回归情况
+            shap_array = shap_values
+            expected_value = explainer.expected_value
         
-        # 尝试使用 numpy 数组进行预测
-        st.write("### 尝试使用备选方法进行预测...")
-        try:
-            feature_array = feature_df.values.astype(float)
-            predicted_class = model.predict(feature_array)[0]
-            predicted_proba = model.predict_proba(feature_array)[0]
-            probability = predicted_proba[predicted_class] * 100
-            st.success(f"备选方法预测成功！概率：{probability:.2f}%")
-        except:
-            st.error("备选方法也失败了，请检查模型和输入数据。")
+        # 生成 SHAP 力图
+        plt.figure()
+        shap_plot = shap.force_plot(
+            expected_value,
+            shap_array[0],  # 取第一个样本的SHAP值
+            feature_df.iloc[0],
+            matplotlib=True,
+            show=False
+        )
+        
+        # 显示 SHAP 图
+        st.subheader("SHAP Force Plot")
+        st.pyplot(plt.gcf())
+        plt.close()
+        
+    except Exception as e:
+        st.error(f"Error generating SHAP plot: {str(e)}")
+        
+        # 备用方案：显示特征重要性
+        st.subheader("Feature Importance (Fallback)")
+        if hasattr(model, 'feature_importances_'):
+            feature_importance = pd.DataFrame({
+                'feature': list(feature_ranges.keys()),
+                'importance': model.feature_importances_
+            }).sort_values('importance', ascending=True)
+            
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.barh(feature_importance['feature'], feature_importance['importance'])
+            ax.set_xlabel('Feature Importance')
+            ax.set_title('Random Forest Feature Importance for Cognitive Impairment Prediction')
+            st.pyplot(fig)
